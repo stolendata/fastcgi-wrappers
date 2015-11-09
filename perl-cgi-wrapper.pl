@@ -11,69 +11,59 @@
 
 use FCGI;
 use Socket;
-use POSIX qw(setsid);
+use POSIX 'setsid';
 
 require 'syscall.ph';
 
-#&daemonize;
+&daemonize;
 
 #this keeps the program alive or something after exec'ing perl scripts
 END() { } BEGIN() { }
 *CORE::GLOBAL::exit = sub { die "fakeexit\nrc=".shift()."\n"; };
 eval q{exit};
-if ($@) {
-    exit unless $@ =~ /^fakeexit/;
-};
+exit if( $@ and $@ !~ /^fakeexit/ );
 
 &main;
 
-sub daemonize() {
-    chdir '/'                 or die "Can't chdir to /: $!";
-    defined(my $pid = fork)   or die "Can't fork: $!";
+sub daemonize()
+{
+    chdir '/' or die "Can't chdir to /: $!";
+    defined( my $pid = fork ) or die "Can't fork: $!";
     exit if $pid;
-    setsid                    or die "Can't start a new session: $!";
+    setsid or die "Can't start a new session: $!";
     umask 0;
 }
 
-sub main {
-    $socket = STDIN; #FCGI::OpenSocket( "127.0.0.1:8999", 10 ); #use IP sockets
+sub main
+{
+    $socket = FCGI::OpenSocket( "127.0.0.1:8999", 10 ); #use IP sockets
     $request = FCGI::Request( \*STDIN, \*STDOUT, \*STDERR, \%req_params, $socket );
-    if ($request) { request_loop()};
+    request_loop() if $request;
     FCGI::CloseSocket( $socket );
 }
 
-sub request_loop {
-    while( $request->Accept() >= 0 ) {
-
+sub request_loop
+{
+    while( $request->Accept() >= 0 )
+    {
         #running the cgi app
-        if ( (-x $req_params{SCRIPT_FILENAME}) &&  #can I execute this?
-            (-s $req_params{SCRIPT_FILENAME}) &&  #Is this file empty?
-            (-r $req_params{SCRIPT_FILENAME})     #can I read this file?
-        ){
-            foreach $key ( keys %req_params){
-                $ENV{$key} = $req_params{$key};
-            }
-            my $script_content;
-            open(SCRIPT,"<",$req_params{SCRIPT_FILENAME});
-            {
-                local $/;
-                $script_content = <SCRIPT>;
-            }
-            close(SCRIPT);
-            my $result = eval($script_content);
+        $ENV{$_} = $req_params{$_} foreach keys %req_params;
 
-            unless(defined($result)) {
-                print("Content-type: text/plain\n\n");
-                print "Error: CGI app returned no output - ";
-                print "Executing $req_params{SCRIPT_FILENAME} failed !\n";
-                next;
-            }
+        my $script_content;
+        open( my $script, '<', $req_params{SCRIPT_FILENAME} );
+        {
+            local $/;
+            $script_content = <$script>;
         }
-        else {
-            print("Content-type: text/plain\n\n");
-            print "Error: No such CGI app - $req_params{SCRIPT_FILENAME} may not ";
-            print "exist or is not executable by this process.\n";
-        }
+        close( $script );
+        my $result = eval( $script_content );
 
+        unless( defined($result) )
+        {
+            print "Content-type: text/plain\n\n";
+            print "Error: CGI app returned no output - ";
+            print "Executing $req_params{SCRIPT_FILENAME} failed !\n";
+            next;
+        }
     }
 }
