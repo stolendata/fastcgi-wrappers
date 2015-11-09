@@ -57,13 +57,12 @@ sub request_loop
         }
         close( $script );
         my $result = eval( $script_content );
-        my $err = $@;
 
-        if( $@ or !$result )
+        if( $@ or !defined($result) )
         {
             print "Content-type: text/plain\n\n";
             print "Error: $@\n" and next if $@;
-            print "$req_params{SCRIPT_FILENAME} returned no output\n" if !$result;
-        }    
+            print "$req_params{SCRIPT_FILENAME} returned no output\n";
+        }
     }
 }
