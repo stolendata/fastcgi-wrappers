@@ -57,13 +57,13 @@ sub request_loop
         }
         close( $script );
         my $result = eval( $script_content );
+        my $err = $@;
 
-        unless( defined($result) )
+        if( $@ or !$result )
         {
             print "Content-type: text/plain\n\n";
-            print "Error: CGI app returned no output - ";
-            print "Executing $req_params{SCRIPT_FILENAME} failed !\n";
-            next;
-        }
+            print "Error: $@\n" and next if $@;
+            print "$req_params{SCRIPT_FILENAME} returned no output\n" if !$result;
+        }    
     }
 }
