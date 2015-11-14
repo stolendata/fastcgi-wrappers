@@ -15,7 +15,7 @@ use POSIX 'setsid';
 
 require 'syscall.ph';
 
-&daemonize;
+daemonize();
 
 #this keeps the program alive or something after exec'ing perl scripts
 END() { } BEGIN() { }
@@ -23,11 +23,11 @@ END() { } BEGIN() { }
 eval q{exit};
 exit if( $@ and $@ !~ /^fakeexit/ );
 
-&main;
+main();
 
 sub daemonize()
 {
-    chdir '/' or die "Can't chdir to /: $!";
+    chdir '/' or die "Can't chdir: $!";
     defined( my $pid = fork ) or die "Can't fork: $!";
     exit if $pid;
     setsid or die "Can't start a new session: $!";
@@ -44,24 +44,23 @@ sub main
 
 sub request_loop
 {
-    while( $request->Accept() >= 0 )
+    while( $request->Accept() >= 0 )  # running the cgi app
     {
-        #running the cgi app
         $ENV{$_} = $req_params{$_} foreach keys %req_params;
 
-        my $script_content;
-        open( my $script, '<', $req_params{SCRIPT_FILENAME} );
+        my $script;
+        open( my $fh, '<', $req_params{SCRIPT_FILENAME} ) or do { print "Content-type: text/plain\n\nfile not found"; next; };
         {
             local $/;
-            $script_content = <$script>;
+            $script = <$fh>;
         }
-        close( $script );
-        my $result = eval( $script_content );
+        close( $fh );
+        my $result = eval( $script );
 
         if( $@ or !defined($result) )
         {
             print "Content-type: text/plain\n\n";
-            print "Error: $@\n" and next if $@;
+            print "Error: $@" and next if $@;
             print "$req_params{SCRIPT_FILENAME} returned no output\n";
         }
     }
